@@ -180,7 +180,7 @@ async function uploadToR2(content) {
       secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
     },
   });
-  const key = `AI Digests/${today}.md`;
+  const key = `obsidian/AI Digests/${today}.md`;
   await client.send(
     new PutObjectCommand({
       Bucket: "notes",
