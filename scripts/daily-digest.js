@@ -62,7 +62,17 @@ async function fetchFeed(entry) {
     if (entry.type === "youtube_handle") {
       url = await resolveYouTube(entry.handle);
     }
-    const feed = await parser.parseURL(url);
+    let feed;
+    if (entry.type === "reddit_rss") {
+      const res = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:125.0) Gecko/20100101 Firefox/125.0" },
+      });
+      if (!res.ok) throw new Error(`Reddit fetch ${res.status}`);
+      const body = await res.text();
+      feed = await parser.parseString(body);
+    } else {
+      feed = await parser.parseURL(url);
+    }
     const items = (feed.items || [])
       .filter(isRecent)
       .slice(0, MAX_ITEMS_PER_FEED)
