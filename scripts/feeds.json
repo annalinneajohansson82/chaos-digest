@@ -32,13 +32,13 @@
   "aggregators_and_zeitgeist": [
     { "name": "Hacker News (front page)", "type": "rss", "url": "https://hnrss.org/frontpage" },
     { "name": "Lobsters", "type": "rss", "url": "https://lobste.rs/rss" },
-    { "name": "r/LocalLLaMA", "type": "rss", "url": "https://rsshub.app/reddit/subreddit/LocalLLaMA" },
-    { "name": "r/MachineLearning", "type": "rss", "url": "https://rsshub.app/reddit/subreddit/MachineLearning" },
-    { "name": "r/ExperiencedDevs", "type": "rss", "url": "https://rsshub.app/reddit/subreddit/ExperiencedDevs" },
-    { "name": "r/programming", "type": "rss", "url": "https://rsshub.app/reddit/subreddit/programming" }
+    { "name": "r/LocalLLaMA", "type": "reddit_rss", "url": "https://www.reddit.com/r/LocalLLaMA/new.rss" },
+    { "name": "r/MachineLearning", "type": "reddit_rss", "url": "https://www.reddit.com/r/MachineLearning/new.rss" },
+    { "name": "r/ExperiencedDevs", "type": "reddit_rss", "url": "https://www.reddit.com/r/ExperiencedDevs/new.rss" },
+    { "name": "r/programming", "type": "reddit_rss", "url": "https://www.reddit.com/r/programming/new.rss" }
   ],
 
   "neurodivergence_and_tech": [
-    { "name": "r/ADHD_Programmers", "type": "rss", "url": "https://rsshub.app/reddit/subreddit/ADHD_Programmers" }
+    { "name": "r/ADHD_Programmers", "type": "reddit_rss", "url": "https://www.reddit.com/r/ADHD_Programmers/new.rss" }
   ]
 }

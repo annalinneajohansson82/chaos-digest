@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { execSync } from "node:child_process";
 import Parser from "rss-parser";
 import { GoogleGenAI } from "@google/genai";
 import {
@@ -14,11 +15,12 @@ const { WINDOW_HOURS, MAX_ITEMS_PER_FEED, N_EXAMPLES, SNIPPET_MAX_CHARS,
         R2_REGION, R2_BUCKET, R2_DIGEST_PREFIX, R2_INTERESTING_PREFIX,
         GEMINI_MODEL, YOUTUBE_BASE_URL, YOUTUBE_RSS_BASE_URL } = config;
 const R2_ENDPOINT = process.env.R2_ENDPOINT;
+const FAILURE_THRESHOLD = 3;
 
 const parser = new Parser({ timeout: 15000 });
 
 // ---------------------------------------------------------------------------
-// 1. Load feed config
+// 1. Load feed config and failure tracking
 // ---------------------------------------------------------------------------
 async function loadFeeds() {
   const raw = await fs.readFile(new URL("./feeds.json", import.meta.url), "utf8");
@@ -27,6 +29,49 @@ async function loadFeeds() {
   return Object.entries(config)
     .filter(([key]) => !key.startsWith("_"))
     .flatMap(([, entries]) => entries);
+}
+
+async function loadFailures() {
+  try {
+    const raw = await fs.readFile(new URL("./feed-failures.json", import.meta.url), "utf8");
+    return JSON.parse(raw);
+  } catch {
+    return { _comment: "Tracks consecutive days a feed has failed." };
+  }
+}
+
+async function saveFailures(failures) {
+  await fs.writeFile(
+    new URL("./feed-failures.json", import.meta.url),
+    JSON.stringify(failures, null, 2)
+  );
+}
+
+function updateFailure(failures, feedName, didFail) {
+  if (didFail) {
+    if (!failures[feedName]) {
+      failures[feedName] = { failed_since: today, error: "" };
+    } else if (failures[feedName].failed_since === today) {
+      // Already recorded today
+    } else {
+      const prevDate = new Date(failures[feedName].failed_since);
+      const daysDiff = Math.floor((new Date(today) - prevDate) / (24 * 60 * 60 * 1000));
+      if (daysDiff !== 1) {
+        // Gap in failures, reset counter
+        failures[feedName] = { failed_since: today, error: "" };
+      }
+    }
+  } else {
+    delete failures[feedName];
+  }
+}
+
+function isReadyForRemoval(failures, feedName) {
+  const failure = failures[feedName];
+  if (!failure) return false;
+  const failedSinceDate = new Date(failure.failed_since);
+  const daysFailed = Math.floor((new Date(today) - failedSinceDate) / (24 * 60 * 60 * 1000)) + 1;
+  return daysFailed >= FAILURE_THRESHOLD;
 }
 
 // ---------------------------------------------------------------------------
@@ -62,7 +107,17 @@ async function fetchFeed(entry) {
     if (entry.type === "youtube_handle") {
       url = await resolveYouTube(entry.handle);
     }
-    const feed = await parser.parseURL(url);
+    let feed;
+    if (entry.type === "reddit_rss") {
+      const res = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:125.0) Gecko/20100101 Firefox/125.0" },
+      });
+      if (!res.ok) throw new Error(`Reddit fetch ${res.status}`);
+      const body = await res.text();
+      feed = await parser.parseString(body);
+    } else {
+      feed = await parser.parseURL(url);
+    }
     const items = (feed.items || [])
       .filter(isRecent)
       .slice(0, MAX_ITEMS_PER_FEED)
@@ -75,10 +130,10 @@ async function fetchFeed(entry) {
           .replace(/\s+/g, " ")
           .slice(0, SNIPPET_MAX_CHARS),
       }));
-    return items;
+    return { items, name: entry.name, failed: false };
   } catch (err) {
     console.warn(`  skip "${entry.name}": ${err.message}`);
-    return [];
+    return { items: [], name: entry.name, failed: true, error: err.message };
   }
 }
 
@@ -288,6 +343,60 @@ async function uploadToR2(r2, content) {
 }
 
 // ---------------------------------------------------------------------------
+// 9. Handle feed removal for sources that failed N consecutive days
+// ---------------------------------------------------------------------------
+async function removeBrokenFeeds(feedsToRemove) {
+  if (feedsToRemove.length === 0) return;
+
+  const feedsPath = new URL("./feeds.json", import.meta.url).pathname;
+  const raw = await fs.readFile(feedsPath, "utf8");
+  const feedsConfig = JSON.parse(raw);
+
+  let removed = 0;
+  for (const [section, entries] of Object.entries(feedsConfig)) {
+    if (section.startsWith("_")) continue;
+    feedsConfig[section] = entries.filter((entry) => {
+      if (feedsToRemove.includes(entry.name)) {
+        console.log(`  Removing broken feed: ${entry.name}`);
+        removed++;
+        return false;
+      }
+      return true;
+    });
+  }
+
+  if (removed > 0) {
+    await fs.writeFile(feedsPath, JSON.stringify(feedsConfig, null, 2));
+
+    const failuresPath = new URL("./feed-failures.json", import.meta.url).pathname;
+    const failures = await loadFailures();
+    for (const name of feedsToRemove) {
+      delete failures[name];
+    }
+    await saveFailures(failures);
+
+    // Commit and push
+    try {
+      execSync("git config user.name 'Claude Digest Bot'", { cwd: process.cwd() });
+      execSync("git config user.email 'noreply@anthropic.com'", { cwd: process.cwd() });
+      execSync("git add scripts/feeds.json scripts/feed-failures.json", { cwd: process.cwd() });
+      const branchName = `auto/remove-broken-feeds-${today}`;
+      execSync(`git checkout -b ${branchName}`, { cwd: process.cwd() });
+      execSync(`git commit -m "Remove ${removed} broken feed(s)\\n\\nAutomatically removed feeds that failed for ${FAILURE_THRESHOLD} consecutive days.\\nRemoved: ${feedsToRemove.join(', ')}"`, { cwd: process.cwd() });
+      execSync(`git push origin ${branchName}`, { cwd: process.cwd() });
+
+      // Create PR with auto-merge using gh CLI (available in GitHub Actions)
+      const prTitle = `Remove ${removed} broken feed(s)`;
+      const prBody = `Automatically removed ${removed} feed(s) that failed for ${FAILURE_THRESHOLD} consecutive days.\\n\\nRemoved feeds:\\n${feedsToRemove.map((f) => `- ${f}`).join('\\n')}`;
+      execSync(`gh pr create --base main --head ${branchName} --title "${prTitle}" --body "${prBody}" --auto-merge`, { cwd: process.cwd() });
+      console.log(`Created PR from ${branchName} with auto-merge enabled`);
+    } catch (err) {
+      console.warn(`  Could not create removal PR: ${err.message}`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 async function main() {
@@ -297,7 +406,26 @@ async function main() {
     const feeds = await loadFeeds();
     console.log(`Fetching ${feeds.length} feeds...`);
     const results = await Promise.all(feeds.map(fetchFeed));
-    const items = results.flat();
+
+    let failures = await loadFailures();
+    const feedsToRemove = [];
+
+    for (const result of results) {
+      updateFailure(failures, result.name, result.failed);
+      if (result.failed && isReadyForRemoval(failures, result.name)) {
+        feedsToRemove.push(result.name);
+      }
+    }
+
+    if (feedsToRemove.length > 0) {
+      await removeBrokenFeeds(feedsToRemove);
+    } else {
+      await saveFailures(failures);
+    }
+
+    const items = results
+      .filter((r) => !feedsToRemove.includes(r.name))
+      .flatMap((r) => r.items);
     console.log(`Collected ${items.length} recent items.`);
 
     console.log("Loading interesting items for signal...");
