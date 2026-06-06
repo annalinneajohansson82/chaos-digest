@@ -13,7 +13,7 @@ export default {
   WINDOW_HOURS: 28,
 
   // Maximum items kept per feed — caps noisy sources like Reddit / Hacker News.
-  MAX_ITEMS_PER_FEED: 1,
+  MAX_ITEMS_PER_FEED: 15,
 
   // Character limit for item snippets sent to the AI model.
   SNIPPET_MAX_CHARS: 400,
