@@ -1,6 +1,6 @@
 # Chaos Digest
 
-An automated AI-powered RSS aggregator that generates a daily curated digest for [chaosgoblin.xyz](https://chaosgoblin.xyz) — a blog about neurodivergence (AuDHD) and software development.
+An automated AI-powered content aggregator that generates a daily curated digest for [chaosgoblin.xyz](https://chaosgoblin.xyz) — a blog about neurodivergence (AuDHD) and software development.
 
 ## How it works
 
