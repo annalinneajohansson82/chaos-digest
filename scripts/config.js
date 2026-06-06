@@ -22,25 +22,31 @@ export default {
   // AI / model
   // ---------------------------------------------------------------------------
 
-  // Gemini model used for content generation.
-  GEMINI_MODEL: "gemini-2.5-flash",
+  // LLM provider: "gemini" or "anthropic"
+  LLM_PROVIDER: "gemini",
+
+  // Model ID for the chosen provider.
+  // Gemini example:    "gemini-2.5-flash"
+  // Anthropic example: "claude-opus-4-8"
+  LLM_MODEL: "gemini-2.5-flash",
 
   // Number of previously-saved "interesting" items used as few-shot signal.
   N_EXAMPLES: 15,
 
   // ---------------------------------------------------------------------------
-  // Storage — Cloudflare R2
+  // Storage — S3-compatible (Cloudflare R2, MinIO, AWS S3, etc.)
+  // Endpoint and credentials are read from env vars S3_ENDPOINT,
+  // S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY (repo secrets).
   // ---------------------------------------------------------------------------
 
-  R2_REGION: "auto",
-  // R2_ENDPOINT is read from the R2_ENDPOINT environment variable (repo secret)
-  R2_BUCKET: "notes",
+  S3_REGION: "auto",  // use "auto" for Cloudflare R2; set a real region (e.g. "us-east-1") for AWS S3 or MinIO
+  S3_BUCKET: "notes",
 
-  // R2 key prefix where generated digests are stored.
-  R2_DIGEST_PREFIX: "obsidian/AI Digests/",
+  // Key prefix where generated digests are stored.
+  S3_DIGEST_PREFIX: "obsidian/AI Digests/",
 
-  // R2 key prefix for items manually marked as interesting (few-shot signal).
-  R2_INTERESTING_PREFIX: "obsidian/AI Digests/Interesting/",
+  // Key prefix for items manually marked as interesting (few-shot signal).
+  S3_INTERESTING_PREFIX: "obsidian/AI Digests/Interesting/",
 
   // ---------------------------------------------------------------------------
   // YouTube

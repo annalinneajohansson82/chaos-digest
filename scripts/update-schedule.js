@@ -9,24 +9,18 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { GoogleGenAI } from "@google/genai";
 import config from "./config.js";
+import { generateText, requiredApiKeyVar } from "./llm.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WORKFLOW_PATH = path.resolve(__dirname, "../.github/workflows/daily-digest.yml");
 
 async function scheduleToCron(schedule) {
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   const prompt = `Convert the following human-readable schedule description into a valid cron expression (5 fields: minute hour day month weekday). Reply with ONLY the cron expression — no explanation, no backticks, no extra text.
 
 Schedule: "${schedule}"`;
 
-  const response = await ai.models.generateContent({
-    model: config.GEMINI_MODEL,
-    contents: prompt,
-  });
-
-  const cron = (response.text || "").trim();
+  const cron = await generateText(prompt);
   if (!/^\S+ \S+ \S+ \S+ \S+$/.test(cron)) {
     throw new Error(`Unexpected model response (not a cron expression): "${cron}"`);
   }
@@ -34,8 +28,9 @@ Schedule: "${schedule}"`;
 }
 
 async function main() {
-  if (!process.env.GEMINI_API_KEY) {
-    console.error("Error: GEMINI_API_KEY environment variable is not set.");
+  const apiKeyVar = requiredApiKeyVar();
+  if (apiKeyVar && !process.env[apiKeyVar]) {
+    console.error(`Error: ${apiKeyVar} environment variable is not set.`);
     process.exit(1);
   }
 

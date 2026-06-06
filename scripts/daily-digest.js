@@ -1,7 +1,6 @@
 import fs from "node:fs/promises";
 import { execSync } from "node:child_process";
 import Parser from "rss-parser";
-import { GoogleGenAI } from "@google/genai";
 import {
   S3Client,
   PutObjectCommand,
@@ -9,12 +8,13 @@ import {
   ListObjectsV2Command,
 } from "@aws-sdk/client-s3";
 import config from "./config.js";
+import { generateText, requiredApiKeyVar } from "./llm.js";
 
 const today = new Date().toISOString().split("T")[0];
 const { WINDOW_HOURS, MAX_ITEMS_PER_FEED, N_EXAMPLES, SNIPPET_MAX_CHARS,
-        R2_REGION, R2_BUCKET, R2_DIGEST_PREFIX, R2_INTERESTING_PREFIX,
-        GEMINI_MODEL, YOUTUBE_BASE_URL, YOUTUBE_RSS_BASE_URL } = config;
-const R2_ENDPOINT = process.env.R2_ENDPOINT;
+        S3_REGION, S3_BUCKET, S3_DIGEST_PREFIX, S3_INTERESTING_PREFIX,
+        YOUTUBE_BASE_URL, YOUTUBE_RSS_BASE_URL } = config;
+const S3_ENDPOINT = process.env.S3_ENDPOINT || process.env.R2_ENDPOINT;
 const FAILURE_THRESHOLD = 3;
 
 const parser = new Parser({ timeout: 15000 });
@@ -138,15 +138,15 @@ async function fetchFeed(entry) {
 }
 
 // ---------------------------------------------------------------------------
-// 4. R2 client (created once in main, passed to functions that need it)
+// 4. S3 client (created once in main, passed to functions that need it)
 // ---------------------------------------------------------------------------
-function createR2Client() {
+function createS3Client() {
   return new S3Client({
-    region: R2_REGION,
-    endpoint: R2_ENDPOINT,
+    region: S3_REGION,
+    endpoint: S3_ENDPOINT,
     credentials: {
-      accessKeyId: process.env.R2_ACCESS_KEY_ID,
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+      accessKeyId: process.env.S3_ACCESS_KEY_ID || process.env.R2_ACCESS_KEY_ID,
+      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || process.env.R2_SECRET_ACCESS_KEY,
     },
   });
 }
@@ -181,7 +181,7 @@ async function loadInterestingItems(r2) {
   let contents;
   try {
     const res = await r2.send(
-      new ListObjectsV2Command({ Bucket: R2_BUCKET, Prefix: R2_INTERESTING_PREFIX })
+      new ListObjectsV2Command({ Bucket: S3_BUCKET, Prefix: S3_INTERESTING_PREFIX })
     );
     contents = res.Contents ?? [];
   } catch (err) {
@@ -191,7 +191,7 @@ async function loadInterestingItems(r2) {
 
   const keys = contents
     .map((obj) => obj.Key)
-    .filter((k) => k !== R2_INTERESTING_PREFIX && !k.endsWith("/"));
+    .filter((k) => k !== S3_INTERESTING_PREFIX && !k.endsWith("/"));
 
   if (keys.length === 0) return [];
   console.log(`  Found ${keys.length} item(s) in Interesting/`);
@@ -199,7 +199,7 @@ async function loadInterestingItems(r2) {
   const processed = [];
   for (const key of keys) {
     try {
-      const res = await r2.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: key }));
+      const res = await r2.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: key }));
       const raw = await res.Body.transformToString("utf-8");
       const { meta, body } = parseFrontmatter(raw);
 
@@ -209,7 +209,7 @@ async function loadInterestingItems(r2) {
         const updated = serializeWithFrontmatter(meta, body);
         await r2.send(
           new PutObjectCommand({
-            Bucket: R2_BUCKET,
+            Bucket: S3_BUCKET,
             Key: key,
             Body: updated,
             ContentType: "text/markdown; charset=utf-8",
@@ -316,13 +316,8 @@ async function generateDigest(items, examples = []) {
   if (items.length === 0) {
     return `# AI Digest — ${today}\n\n## Strong matches\n\n*No items pulled from feeds today (all feeds empty or unreachable).*\n`;
   }
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-  const response = await ai.models.generateContent({
-    model: GEMINI_MODEL,
-    contents: buildPrompt(items, examples),
-  });
-  const text = (response.text || "").trim();
-  if (!text) throw new Error("Empty response from Gemini");
+  const text = await generateText(buildPrompt(items, examples));
+  if (!text) throw new Error("Empty response from LLM");
   return text;
 }
 
@@ -330,12 +325,12 @@ async function generateDigest(items, examples = []) {
 // 8. Upload digest to R2
 // ---------------------------------------------------------------------------
 async function uploadToR2(r2, content) {
-  const key = `${R2_DIGEST_PREFIX}${today}.md`;
+  const key = `${S3_DIGEST_PREFIX}${today}.md`;
 
   // Check if file already exists for today
   let existingContent = "";
   try {
-    const res = await r2.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: key }));
+    const res = await r2.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: key }));
     existingContent = await res.Body.transformToString("utf-8");
   } catch (err) {
     // File doesn't exist yet, which is fine
@@ -364,7 +359,7 @@ async function uploadToR2(r2, content) {
 
   await r2.send(
     new PutObjectCommand({
-      Bucket: R2_BUCKET,
+      Bucket: S3_BUCKET,
       Key: key,
       Body: finalContent,
       ContentType: "text/markdown; charset=utf-8",
@@ -432,7 +427,13 @@ async function removeBrokenFeeds(feedsToRemove) {
 // ---------------------------------------------------------------------------
 async function main() {
   try {
-    const r2 = createR2Client();
+    const apiKeyVar = requiredApiKeyVar();
+    if (apiKeyVar && !process.env[apiKeyVar]) {
+      console.error(`Error: ${apiKeyVar} environment variable is not set.`);
+      process.exit(1);
+    }
+
+    const r2 = createS3Client();
 
     const feeds = await loadFeeds();
     console.log(`Fetching ${feeds.length} feeds...`);
