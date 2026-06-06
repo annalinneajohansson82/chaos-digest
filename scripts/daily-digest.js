@@ -331,11 +331,42 @@ async function generateDigest(items, examples = []) {
 // ---------------------------------------------------------------------------
 async function uploadToR2(r2, content) {
   const key = `${R2_DIGEST_PREFIX}${today}.md`;
+
+  // Check if file already exists for today
+  let existingContent = "";
+  try {
+    const res = await r2.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: key }));
+    existingContent = await res.Body.transformToString("utf-8");
+  } catch (err) {
+    // File doesn't exist yet, which is fine
+    if (err.name !== "NoSuchKey") {
+      console.warn(`  Warning reading existing digest: ${err.message}`);
+    }
+  }
+
+  // If file exists and has content, check if new digest is different
+  let finalContent = content;
+  if (existingContent.trim()) {
+    // Compare key sections to detect if there's new content
+    const newHasContent = content.includes("### [") || content.includes("- [");
+    const oldHasContent = existingContent.includes("### [") || existingContent.includes("- [");
+
+    if (newHasContent && oldHasContent && content !== existingContent) {
+      // New content found, append with timestamp
+      const now = new Date().toLocaleString("en-US", { timeZone: "UTC" });
+      finalContent = `${existingContent}\n\n---\n\n## Updated at ${now} UTC\n\n${content.replace(/^# AI Digest — .*$\n/m, "")}`;
+      console.log(`  Appending new content to existing digest for ${today}`);
+    } else if (content === existingContent) {
+      console.log(`  No new content found; keeping existing digest for ${today}`);
+      return;
+    }
+  }
+
   await r2.send(
     new PutObjectCommand({
       Bucket: R2_BUCKET,
       Key: key,
-      Body: content,
+      Body: finalContent,
       ContentType: "text/markdown; charset=utf-8",
     })
   );
