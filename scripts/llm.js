@@ -4,13 +4,18 @@ import config from "./config.js";
 
 const { LLM_PROVIDER, LLM_MODEL } = config;
 
-/**
- * Send a prompt to the configured LLM and return the response text.
- * Provider is controlled by LLM_PROVIDER in config.js ("gemini" | "anthropic").
- * @param {string} prompt
- * @returns {Promise<string>}
- */
-export async function generateText(prompt) {
+const RETRY_DELAYS_MS = [30_000, 60_000, 120_000];
+
+function isTransient(err) {
+  // Gemini: ApiError with status 503; Anthropic: APIStatusError with status 503
+  return err?.status === 503;
+}
+
+async function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function callProvider(prompt) {
   if (LLM_PROVIDER === "gemini") {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     const response = await ai.models.generateContent({
@@ -34,6 +39,28 @@ export async function generateText(prompt) {
   throw new Error(
     `Unknown LLM_PROVIDER "${LLM_PROVIDER}". Supported values: "gemini", "anthropic".`
   );
+}
+
+/**
+ * Send a prompt to the configured LLM and return the response text.
+ * Retries up to 3 times (after 30s, 60s, 120s) on transient 503 errors.
+ * @param {string} prompt
+ * @returns {Promise<string>}
+ */
+export async function generateText(prompt) {
+  let lastErr;
+  for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      return await callProvider(prompt);
+    } catch (err) {
+      if (!isTransient(err) || attempt === RETRY_DELAYS_MS.length) throw err;
+      const delay = RETRY_DELAYS_MS[attempt];
+      console.warn(`  LLM 503 — retrying in ${delay / 1000}s (attempt ${attempt + 1}/${RETRY_DELAYS_MS.length})...`);
+      lastErr = err;
+      await sleep(delay);
+    }
+  }
+  throw lastErr;
 }
 
 /** Returns the name of the required API key env var for the current provider. */
