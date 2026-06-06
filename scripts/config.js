@@ -33,7 +33,7 @@ export default {
   // ---------------------------------------------------------------------------
 
   R2_REGION: "auto",
-  R2_ENDPOINT: "https://9a55ca892783d4a47da198e9ff6a5daa.r2.cloudflarestorage.com",
+  // R2_ENDPOINT is read from the R2_ENDPOINT environment variable (repo secret)
   R2_BUCKET: "notes",
 
   // R2 key prefix where generated digests are stored.

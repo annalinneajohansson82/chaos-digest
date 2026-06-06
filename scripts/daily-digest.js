@@ -11,8 +11,9 @@ import config from "./config.js";
 
 const today = new Date().toISOString().split("T")[0];
 const { WINDOW_HOURS, MAX_ITEMS_PER_FEED, N_EXAMPLES, SNIPPET_MAX_CHARS,
-        R2_REGION, R2_ENDPOINT, R2_BUCKET, R2_DIGEST_PREFIX, R2_INTERESTING_PREFIX,
+        R2_REGION, R2_BUCKET, R2_DIGEST_PREFIX, R2_INTERESTING_PREFIX,
         GEMINI_MODEL, YOUTUBE_BASE_URL, YOUTUBE_RSS_BASE_URL } = config;
+const R2_ENDPOINT = process.env.R2_ENDPOINT;
 
 const parser = new Parser({ timeout: 15000 });
 
