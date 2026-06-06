@@ -1,11 +1,18 @@
 import fs from "node:fs/promises";
 import Parser from "rss-parser";
 import { GoogleGenAI } from "@google/genai";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  ListObjectsV2Command,
+} from "@aws-sdk/client-s3";
 
 const today = new Date().toISOString().split("T")[0];
 const WINDOW_HOURS = 28; // a little over 24h to absorb run-timing drift
 const MAX_ITEMS_PER_FEED = 15; // cap noisy feeds (Reddit, HN)
+const INTERESTING_PREFIX = "obsidian/AI Digests/Interesting/";
+const N_EXAMPLES = 15; // how many saved items to use as few-shot signal
 
 const parser = new Parser({ timeout: 15000 });
 
@@ -75,7 +82,99 @@ async function fetchFeed(entry) {
 }
 
 // ---------------------------------------------------------------------------
-// 4. Build the filter prompt + call Gemini Flash (free tier)
+// 4. R2 client (created once in main, passed to functions that need it)
+// ---------------------------------------------------------------------------
+function createR2Client() {
+  return new S3Client({
+    region: "auto",
+    endpoint: "https://9a55ca892783d4a47da198e9ff6a5daa.r2.cloudflarestorage.com",
+    credentials: {
+      accessKeyId: process.env.R2_ACCESS_KEY_ID,
+      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 5. Frontmatter helpers
+// ---------------------------------------------------------------------------
+function parseFrontmatter(raw) {
+  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+  if (!match) return { meta: {}, body: raw };
+  const meta = {};
+  for (const line of match[1].split(/\r?\n/)) {
+    const colon = line.indexOf(":");
+    if (colon === -1) continue;
+    const key = line.slice(0, colon).trim();
+    const val = line.slice(colon + 1).trim();
+    if (key) meta[key] = val;
+  }
+  return { meta, body: match[2] };
+}
+
+function serializeWithFrontmatter(meta, body) {
+  const lines = Object.entries(meta).map(([k, v]) => `${k}: ${v}`);
+  return `---\n${lines.join("\n")}\n---\n${body}`;
+}
+
+// ---------------------------------------------------------------------------
+// 6. Read AI Digests/Interesting/, stamp new files, return N most recent bodies
+//    Fails gracefully: errors here never abort the main digest run.
+// ---------------------------------------------------------------------------
+async function loadInterestingItems(r2) {
+  let contents;
+  try {
+    const res = await r2.send(
+      new ListObjectsV2Command({ Bucket: "notes", Prefix: INTERESTING_PREFIX })
+    );
+    contents = res.Contents ?? [];
+  } catch (err) {
+    console.warn(`  Could not list Interesting/ folder: ${err.message}`);
+    return [];
+  }
+
+  const keys = contents
+    .map((obj) => obj.Key)
+    .filter((k) => k !== INTERESTING_PREFIX && !k.endsWith("/"));
+
+  if (keys.length === 0) return [];
+  console.log(`  Found ${keys.length} item(s) in Interesting/`);
+
+  const processed = [];
+  for (const key of keys) {
+    try {
+      const res = await r2.send(new GetObjectCommand({ Bucket: "notes", Key: key }));
+      const raw = await res.Body.transformToString("utf-8");
+      const { meta, body } = parseFrontmatter(raw);
+
+      if (!meta.digest_seen) {
+        // First time this file has been seen — stamp it and write back
+        meta.digest_seen = today;
+        const updated = serializeWithFrontmatter(meta, body);
+        await r2.send(
+          new PutObjectCommand({
+            Bucket: "notes",
+            Key: key,
+            Body: updated,
+            ContentType: "text/markdown; charset=utf-8",
+          })
+        );
+        console.log(`  Stamped: ${key}`);
+      }
+
+      processed.push({ body: body.trim(), digest_seen: meta.digest_seen });
+    } catch (err) {
+      console.warn(`  Could not process ${key}: ${err.message}`);
+    }
+  }
+
+  // Most-recent-first by digest_seen date, capped at N_EXAMPLES
+  processed.sort((a, b) => b.digest_seen.localeCompare(a.digest_seen));
+  return processed.slice(0, N_EXAMPLES).map((item) => item.body);
+}
+
+// ---------------------------------------------------------------------------
+// 7. Build the filter prompt + call Gemini Flash (free tier)
 // ---------------------------------------------------------------------------
 const CONTENT_STRATEGY = `
 Blog: chaosgoblin.xyz
@@ -101,7 +200,7 @@ What does NOT fit:
 - Generic "AI changes everything" takes
 `;
 
-function buildPrompt(items) {
+function buildPrompt(items, examples = []) {
   const list = items
     .map(
       (i, n) =>
@@ -109,13 +208,17 @@ function buildPrompt(items) {
     )
     .join("\n\n");
 
+  const examplesSection =
+    examples.length > 0
+      ? `\n## Previously valued by Anna\nThese are items Anna saved as worth reading. Use them to calibrate topic and\nangle weighting — bias toward surfacing similar content. They do not override\nthe content strategy above; treat them as a soft signal, not a hard filter.\n\n${examples.map((e, i) => `[${i + 1}]\n${e}`).join("\n\n---\n\n")}\n\n`
+      : "";
+
   return `You are a research assistant for the blog chaosgoblin.xyz. Today is ${today}.
 
 Below are ${items.length} items pulled from the blog's RSS sources in the last
 ${WINDOW_HOURS} hours. Filter them against this content strategy:
 ${CONTENT_STRATEGY}
-
-Prioritize: smaller/indie/open source tools and workflow hacks over Big Tech.
+${examplesSection}Prioritize: smaller/indie/open source tools and workflow hacks over Big Tech.
 Include major model releases briefly even if off-niche. Be selective: 3-5 strong
 matches beats ten mediocre ones. Never invent items or links; only use what is
 listed. If nothing fits, say so plainly.
@@ -153,14 +256,14 @@ If there are no strong matches, write "*No strong matches today.*" under that
 heading instead of padding.`;
 }
 
-async function generateDigest(items) {
+async function generateDigest(items, examples = []) {
   if (items.length === 0) {
     return `# AI Digest — ${today}\n\n## Strong matches\n\n*No items pulled from feeds today (all feeds empty or unreachable).*\n`;
   }
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash",
-    contents: buildPrompt(items),
+    contents: buildPrompt(items, examples),
   });
   const text = (response.text || "").trim();
   if (!text) throw new Error("Empty response from Gemini");
@@ -168,20 +271,11 @@ async function generateDigest(items) {
 }
 
 // ---------------------------------------------------------------------------
-// 5. Upload to R2
+// 8. Upload digest to R2
 // ---------------------------------------------------------------------------
-async function uploadToR2(content) {
-  const client = new S3Client({
-    region: "auto",
-    endpoint:
-      "https://9a55ca892783d4a47da198e9ff6a5daa.r2.cloudflarestorage.com",
-    credentials: {
-      accessKeyId: process.env.R2_ACCESS_KEY_ID,
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-    },
-  });
+async function uploadToR2(r2, content) {
   const key = `obsidian/AI Digests/${today}.md`;
-  await client.send(
+  await r2.send(
     new PutObjectCommand({
       Bucket: "notes",
       Key: key,
@@ -197,15 +291,20 @@ async function uploadToR2(content) {
 // ---------------------------------------------------------------------------
 async function main() {
   try {
+    const r2 = createR2Client();
+
     const feeds = await loadFeeds();
     console.log(`Fetching ${feeds.length} feeds...`);
-
     const results = await Promise.all(feeds.map(fetchFeed));
     const items = results.flat();
     console.log(`Collected ${items.length} recent items.`);
 
-    const digest = await generateDigest(items);
-    await uploadToR2(digest);
+    console.log("Loading interesting items for signal...");
+    const examples = await loadInterestingItems(r2);
+    console.log(`Signal: ${examples.length} example(s) loaded.`);
+
+    const digest = await generateDigest(items, examples);
+    await uploadToR2(r2, digest);
     console.log("Done.");
   } catch (err) {
     console.error("Digest failed:", err);
