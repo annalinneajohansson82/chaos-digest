@@ -12,10 +12,10 @@
     { "name": "OpenAI News", "type": "rss", "url": "https://openai.com/news/rss.xml" },
     { "name": "Anthropic News", "type": "rss", "url": "https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_claude.xml" },
     { "name": "Anthropic Research", "type": "rss", "url": "https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_research.xml" },
-    { "name": "Claude Code Changelog", "type": "rss", "url": "https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_claude_code_changelog.xml", "verify": true },
+    { "name": "Claude Code Changelog", "type": "rss", "url": "https://github.com/anthropics/claude-code/releases.atom" },
     { "name": "Mistral AI News", "type": "rss", "url": "https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_mistral.xml" },
     { "name": "Google DeepMind", "type": "rss", "url": "https://deepmind.google/blog/rss.xml", "verify": true },
-    { "name": "IBM Research Blog", "type": "rss", "url": "https://research.ibm.com/blog/rss", "verify": true },
+    { "name": "IBM Newsroom", "type": "rss", "url": "https://newsroom.ibm.com/announcements?pagetemplate=rss" },
     { "name": "Cohere Blog", "type": "rss", "url": "https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_cohere.xml" },
     { "name": "Groq Blog", "type": "rss", "url": "https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_groq.xml" },
     { "name": "Ollama Blog", "type": "rss", "url": "https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_ollama.xml" },
@@ -31,15 +31,14 @@
 
   "aggregators_and_zeitgeist": [
     { "name": "Hacker News (front page)", "type": "rss", "url": "https://hnrss.org/frontpage" },
-    { "name": "Hacker News (AI search)", "type": "rss", "url": "https://hnrss.org/newest?q=AI+OR+LLM+OR+agent" },
     { "name": "Lobsters", "type": "rss", "url": "https://lobste.rs/rss" },
-    { "name": "r/LocalLLaMA", "type": "rss", "url": "https://www.reddit.com/r/LocalLLaMA/.rss" },
-    { "name": "r/MachineLearning", "type": "rss", "url": "https://www.reddit.com/r/MachineLearning/.rss" },
-    { "name": "r/ExperiencedDevs", "type": "rss", "url": "https://www.reddit.com/r/ExperiencedDevs/.rss" },
-    { "name": "r/programming", "type": "rss", "url": "https://www.reddit.com/r/programming/.rss" }
+    { "name": "r/LocalLLaMA", "type": "rss", "url": "https://rsshub.app/reddit/subreddit/LocalLLaMA" },
+    { "name": "r/MachineLearning", "type": "rss", "url": "https://rsshub.app/reddit/subreddit/MachineLearning" },
+    { "name": "r/ExperiencedDevs", "type": "rss", "url": "https://rsshub.app/reddit/subreddit/ExperiencedDevs" },
+    { "name": "r/programming", "type": "rss", "url": "https://rsshub.app/reddit/subreddit/programming" }
   ],
 
   "neurodivergence_and_tech": [
-    { "name": "r/ADHD_Programmers", "type": "rss", "url": "https://www.reddit.com/r/ADHD_Programmers/.rss" }
+    { "name": "r/ADHD_Programmers", "type": "rss", "url": "https://rsshub.app/reddit/subreddit/ADHD_Programmers" }
   ]
 }
