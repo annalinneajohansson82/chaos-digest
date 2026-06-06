@@ -135,7 +135,7 @@ async function loadInterestingItems(r2) {
 
   const keys = contents
     .map((obj) => obj.Key)
-    .filter((k) => k !== INTERESTING_PREFIX && !k.endsWith("/"));
+    .filter((k) => k !== R2_INTERESTING_PREFIX && !k.endsWith("/"));
 
   if (keys.length === 0) return [];
   console.log(`  Found ${keys.length} item(s) in Interesting/`);
