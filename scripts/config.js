@@ -55,7 +55,7 @@ export default {
   // That script translates this string into a cron expression and updates
   // .github/workflows/daily-digest.yml automatically.
   //
-  // Note: Node.js version is set on line 17 of daily-digest.yml.
+  // Note: Node.js version is set on line 17 of .github/workflows/daily-digest.yml.
   // ---------------------------------------------------------------------------
 
   SCHEDULE: "once daily at 7am UTC",
