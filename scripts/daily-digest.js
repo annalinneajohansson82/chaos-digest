@@ -7,12 +7,12 @@ import {
   GetObjectCommand,
   ListObjectsV2Command,
 } from "@aws-sdk/client-s3";
+import config from "./config.js";
 
 const today = new Date().toISOString().split("T")[0];
-const WINDOW_HOURS = 28; // a little over 24h to absorb run-timing drift
-const MAX_ITEMS_PER_FEED = 15; // cap noisy feeds (Reddit, HN)
-const INTERESTING_PREFIX = "obsidian/AI Digests/Interesting/";
-const N_EXAMPLES = 15; // how many saved items to use as few-shot signal
+const { WINDOW_HOURS, MAX_ITEMS_PER_FEED, N_EXAMPLES, SNIPPET_MAX_CHARS,
+        R2_REGION, R2_ENDPOINT, R2_BUCKET, R2_DIGEST_PREFIX, R2_INTERESTING_PREFIX,
+        GEMINI_MODEL, YOUTUBE_BASE_URL, YOUTUBE_RSS_BASE_URL } = config;
 
 const parser = new Parser({ timeout: 15000 });
 
@@ -32,7 +32,7 @@ async function loadFeeds() {
 // 2. Resolve YouTube @handles to channel RSS feeds
 // ---------------------------------------------------------------------------
 async function resolveYouTube(handle) {
-  const url = `https://www.youtube.com/${handle}`;
+  const url = `${YOUTUBE_BASE_URL}${handle}`;
   const res = await fetch(url, {
     headers: { "User-Agent": "Mozilla/5.0 (chaosgoblin-digest)" },
   });
@@ -42,7 +42,7 @@ async function resolveYouTube(handle) {
     html.match(/"channelId":"(UC[\w-]+)"/) ||
     html.match(/channel\/(UC[\w-]+)/);
   if (!match) throw new Error("channelId not found");
-  return `https://www.youtube.com/feeds/videos.xml?channel_id=${match[1]}`;
+  return `${YOUTUBE_RSS_BASE_URL}${match[1]}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -72,7 +72,7 @@ async function fetchFeed(entry) {
         date: i.isoDate || i.pubDate || "",
         snippet: (i.contentSnippet || i.content || "")
           .replace(/\s+/g, " ")
-          .slice(0, 400),
+          .slice(0, SNIPPET_MAX_CHARS),
       }));
     return items;
   } catch (err) {
@@ -86,8 +86,8 @@ async function fetchFeed(entry) {
 // ---------------------------------------------------------------------------
 function createR2Client() {
   return new S3Client({
-    region: "auto",
-    endpoint: "https://9a55ca892783d4a47da198e9ff6a5daa.r2.cloudflarestorage.com",
+    region: R2_REGION,
+    endpoint: R2_ENDPOINT,
     credentials: {
       accessKeyId: process.env.R2_ACCESS_KEY_ID,
       secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
@@ -125,7 +125,7 @@ async function loadInterestingItems(r2) {
   let contents;
   try {
     const res = await r2.send(
-      new ListObjectsV2Command({ Bucket: "notes", Prefix: INTERESTING_PREFIX })
+      new ListObjectsV2Command({ Bucket: R2_BUCKET, Prefix: R2_INTERESTING_PREFIX })
     );
     contents = res.Contents ?? [];
   } catch (err) {
@@ -143,7 +143,7 @@ async function loadInterestingItems(r2) {
   const processed = [];
   for (const key of keys) {
     try {
-      const res = await r2.send(new GetObjectCommand({ Bucket: "notes", Key: key }));
+      const res = await r2.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: key }));
       const raw = await res.Body.transformToString("utf-8");
       const { meta, body } = parseFrontmatter(raw);
 
@@ -153,7 +153,7 @@ async function loadInterestingItems(r2) {
         const updated = serializeWithFrontmatter(meta, body);
         await r2.send(
           new PutObjectCommand({
-            Bucket: "notes",
+            Bucket: R2_BUCKET,
             Key: key,
             Body: updated,
             ContentType: "text/markdown; charset=utf-8",
@@ -262,7 +262,7 @@ async function generateDigest(items, examples = []) {
   }
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: GEMINI_MODEL,
     contents: buildPrompt(items, examples),
   });
   const text = (response.text || "").trim();
@@ -274,10 +274,10 @@ async function generateDigest(items, examples = []) {
 // 8. Upload digest to R2
 // ---------------------------------------------------------------------------
 async function uploadToR2(r2, content) {
-  const key = `obsidian/AI Digests/${today}.md`;
+  const key = `${R2_DIGEST_PREFIX}${today}.md`;
   await r2.send(
     new PutObjectCommand({
-      Bucket: "notes",
+      Bucket: R2_BUCKET,
       Key: key,
       Body: content,
       ContentType: "text/markdown; charset=utf-8",
