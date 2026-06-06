@@ -39,7 +39,7 @@ export default {
   // S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY (repo secrets).
   // ---------------------------------------------------------------------------
 
-  S3_REGION: "auto",
+  S3_REGION: "auto",  // use "auto" for Cloudflare R2; set a real region (e.g. "us-east-1") for AWS S3 or MinIO
   S3_BUCKET: "notes",
 
   // Key prefix where generated digests are stored.

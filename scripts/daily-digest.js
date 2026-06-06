@@ -8,7 +8,7 @@ import {
   ListObjectsV2Command,
 } from "@aws-sdk/client-s3";
 import config from "./config.js";
-import { generateText } from "./llm.js";
+import { generateText, requiredApiKeyVar } from "./llm.js";
 
 const today = new Date().toISOString().split("T")[0];
 const { WINDOW_HOURS, MAX_ITEMS_PER_FEED, N_EXAMPLES, SNIPPET_MAX_CHARS,
@@ -427,6 +427,12 @@ async function removeBrokenFeeds(feedsToRemove) {
 // ---------------------------------------------------------------------------
 async function main() {
   try {
+    const apiKeyVar = requiredApiKeyVar();
+    if (apiKeyVar && !process.env[apiKeyVar]) {
+      console.error(`Error: ${apiKeyVar} environment variable is not set.`);
+      process.exit(1);
+    }
+
     const r2 = createS3Client();
 
     const feeds = await loadFeeds();

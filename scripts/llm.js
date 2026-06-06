@@ -24,7 +24,7 @@ export async function generateText(prompt) {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const message = await client.messages.create({
       model: LLM_MODEL,
-      max_tokens: 4096,
+      max_tokens: 8192,
       messages: [{ role: "user", content: prompt }],
     });
     const block = message.content.find((b) => b.type === "text");
