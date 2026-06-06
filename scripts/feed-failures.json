@@ -1,0 +1,3 @@
+{
+  "_comment": "Tracks consecutive days a feed has failed. Feeds are auto-removed after 3 consecutive failures."
+}
