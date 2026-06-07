@@ -286,6 +286,11 @@ Output this markdown structure exactly:
 
 # AI Digest — ${today}
 
+## Big news
+- [Item]: [1 sentence + link]
+
+---
+
 ## Strong matches
 ### [Title]
 **Source:** [source + link]
@@ -300,11 +305,6 @@ Output this markdown structure exactly:
 **Source:** [source + link]
 **What it is:** [1-2 sentences]
 **Why it might fit:** [1 sentence]
-
----
-
-## Big news
-- [Item]: [1 sentence + link]
 
 ---
 
