@@ -28,9 +28,9 @@ export default {
   // Fallback chain of free model IDs (tried in order within a single request).
   // All must be instruction-tuned chat models: no reasoning/r1-style, no -base models.
   MODELS: [
-    "deepseek/deepseek-chat-v3-0324:free",
-    "meta-llama/llama-4-maverick:free",
-    "mistralai/mistral-small-3.1-24b-instruct:free",
+    "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "openrouter/owl-alpha",
   ],
 
   // Number of previously-saved "interesting" items used as few-shot signal.
