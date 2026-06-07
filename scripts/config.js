@@ -19,16 +19,19 @@ export default {
   SNIPPET_MAX_CHARS: 400,
 
   // ---------------------------------------------------------------------------
-  // AI / model
+  // AI / model (OpenRouter gateway)
   // ---------------------------------------------------------------------------
 
-  // LLM provider: "gemini" or "anthropic"
-  LLM_PROVIDER: "gemini",
+  // OpenRouter API base URL (OpenAI-compatible).
+  OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
 
-  // Model ID for the chosen provider.
-  // Gemini example:    "gemini-2.5-flash"
-  // Anthropic example: "claude-opus-4-8"
-  LLM_MODEL: "gemini-2.5-flash",
+  // Fallback chain of free model IDs (tried in order within a single request).
+  // All must be instruction-tuned chat models: no reasoning/r1-style, no -base models.
+  MODELS: [
+    "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "openrouter/owl-alpha",
+  ],
 
   // Number of previously-saved "interesting" items used as few-shot signal.
   N_EXAMPLES: 15,

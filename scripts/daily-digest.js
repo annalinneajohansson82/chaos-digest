@@ -8,7 +8,7 @@ import {
   ListObjectsV2Command,
 } from "@aws-sdk/client-s3";
 import config from "./config.js";
-import { generateText, requiredApiKeyVar } from "./llm.js";
+import { callModel, requiredApiKeyVar } from "./llm.js";
 
 const today = new Date().toISOString().split("T")[0];
 const { WINDOW_HOURS, MAX_ITEMS_PER_FEED, N_EXAMPLES, SNIPPET_MAX_CHARS,
@@ -230,7 +230,7 @@ async function loadInterestingItems(r2) {
 }
 
 // ---------------------------------------------------------------------------
-// 7. Build the filter prompt + call Gemini Flash (free tier)
+// 7. Build the filter prompt + call LLM
 // ---------------------------------------------------------------------------
 const CONTENT_STRATEGY = `
 Blog: chaosgoblin.xyz
@@ -316,8 +316,8 @@ async function generateDigest(items, examples = []) {
   if (items.length === 0) {
     return `# AI Digest — ${today}\n\n## Strong matches\n\n*No items pulled from feeds today (all feeds empty or unreachable).*\n`;
   }
-  const text = await generateText(buildPrompt(items, examples));
-  if (!text) throw new Error("Empty response from LLM");
+  const text = await callModel(buildPrompt(items, examples));
+  if (!text) throw new Error("Empty response from model");
   return text;
 }
 
