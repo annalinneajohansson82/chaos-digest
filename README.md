@@ -1,6 +1,6 @@
 # Chaos Digest
 
-A personal daily content aggregator that pulls from RSS/Atom feeds, Reddit communities, and YouTube channels, filters everything through Google Gemini, and uploads a curated Markdown digest to Cloudflare R2 — where it lands directly in an Obsidian vault.
+A personal daily content aggregator that pulls from RSS/Atom feeds, Reddit communities, and YouTube channels, filters everything through an LLM via OpenRouter, and uploads a curated Markdown digest to Cloudflare R2 — where it lands directly in an Obsidian vault.
 
 Runs on a schedule via GitHub Actions. The digest is tuned to a specific content strategy (AuDHD + software development), but that strategy lives in one place in the code and is straightforward to replace.
 
@@ -8,7 +8,7 @@ Runs on a schedule via GitHub Actions. The digest is tuned to a specific content
 
 1. Fetches items from ~30 sources published within the last 28 hours — RSS/Atom blogs, Reddit (with spoofed UA to avoid blocks), and YouTube channels resolved from `@handles` at runtime
 2. Loads up to 15 previously saved "interesting" items from R2 as few-shot signal
-3. Sends everything to Gemini (gemini-2.5-flash), which filters down to a small set of strong matches and formats them as structured Markdown
+3. Sends everything to an LLM via [OpenRouter](https://openrouter.ai), which filters down to a small set of strong matches and formats them as structured Markdown. A three-model free fallback chain is tried in order within a single request
 4. Uploads the digest to R2 at `obsidian/AI Digests/YYYY-MM-DD.md`; if a digest already exists for today, new content is appended with a timestamp rather than overwriting
 
 Feed failures are tracked across days. After 3 consecutive failures, the feed is automatically removed from `feeds.json` and a GitHub PR is opened.
@@ -19,7 +19,8 @@ Feed failures are tracked across days. After 3 consecutive failures, the feed is
 scripts/
 ├── daily-digest.js       # Full pipeline: fetch → filter → upload
 ├── update-schedule.js    # Translates a human-readable schedule string to cron and patches the workflow file
-├── config.js             # All tunable values: window, model, R2 paths, schedule
+├── llm.js                # OpenRouter API call (native fetch, no SDK); exports callModel()
+├── config.js             # All tunable values: window, MODELS fallback chain, R2 paths, schedule
 ├── feeds.json            # Feed sources grouped by category
 ├── feed-failures.json    # Consecutive failure tracking (committed by the bot)
 └── package.json
@@ -39,10 +40,12 @@ cd scripts && npm install
 
 | Variable | Description |
 |---|---|
-| `GEMINI_API_KEY` | Google Gemini API key |
-| `R2_ENDPOINT` | Cloudflare R2 endpoint URL |
-| `R2_ACCESS_KEY_ID` | R2 access key ID |
-| `R2_SECRET_ACCESS_KEY` | R2 secret access key |
+| `OPENROUTER_API_KEY` | OpenRouter API key |
+| `R2_ENDPOINT` or `S3_ENDPOINT` | Cloudflare R2 (or S3-compatible) endpoint URL |
+| `R2_ACCESS_KEY_ID` or `S3_ACCESS_KEY_ID` | Access key ID |
+| `R2_SECRET_ACCESS_KEY` or `S3_SECRET_ACCESS_KEY` | Secret access key |
+
+The code reads `S3_*` first and falls back to `R2_*` automatically — set whichever you have.
 
 **Run manually:**
 
