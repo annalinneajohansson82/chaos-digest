@@ -15,6 +15,16 @@ import { callModel, requiredApiKeyVar } from "./llm.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WORKFLOW_PATH = path.resolve(__dirname, "../.github/workflows/daily-digest.yml");
 
+/**
+ * Convert a human-readable schedule description into a cron expression.
+ *
+ * Uses the configured LLM to translate natural language into a standard
+ * 5-field cron expression. The result is not validated here; validation
+ * happens when the workflow file is used by GitHub Actions.
+ *
+ * @param {string} schedule - Human-readable schedule description.
+ * @returns {Promise<string>} A 5-field cron expression.
+ */
 async function scheduleToCron(schedule) {
   const prompt = `Convert the following human-readable schedule description into a valid cron expression (5 fields: minute hour day month weekday). Reply with ONLY the cron expression — no explanation, no backticks, no extra text.
 
@@ -27,6 +37,10 @@ Schedule: "${schedule}"`;
   return cron;
 }
 
+/**
+ * Entry point. Reads config.SCHEDULE, asks the model for a cron expression,
+ * then patches .github/workflows/daily-digest.yml.
+ */
 async function main() {
   const apiKeyVar = requiredApiKeyVar();
   if (apiKeyVar && !process.env[apiKeyVar]) {

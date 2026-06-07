@@ -49,7 +49,11 @@ export async function callModel(prompt, models = MODELS) {
   return text;
 }
 
-/** Returns the name of the required API key env var. */
+/**
+ * Returns the name of the required API key environment variable.
+ *
+ * @returns {string} The environment variable name used by {@link callModel}.
+ */
 export function requiredApiKeyVar() {
   return "OPENROUTER_API_KEY";
 }

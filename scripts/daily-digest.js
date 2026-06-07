@@ -22,6 +22,15 @@ const parser = new Parser({ timeout: 15000 });
 // ---------------------------------------------------------------------------
 // 1. Load feed config and failure tracking
 // ---------------------------------------------------------------------------
+
+/**
+ * Load and flatten the feed configuration from feeds.json.
+ *
+ * Group keys beginning with "_" are treated as comments and skipped.
+ *
+ * @returns {Promise<Array<{name: string, url: string, type?: string, handle?: string}>>}
+ *   Flattened feed entries.
+ */
 async function loadFeeds() {
   const raw = await fs.readFile(new URL("./feeds.json", import.meta.url), "utf8");
   const config = JSON.parse(raw);
@@ -31,6 +40,14 @@ async function loadFeeds() {
     .flatMap(([, entries]) => entries);
 }
 
+/**
+ * Load the feed failure tracker.
+ *
+ * Returns an empty comment object if no failure history exists yet.
+ *
+ * @returns {Promise<Object<string, {failed_since: string, error: string}>>}
+ *   Mapping of feed name to failure records.
+ */
 async function loadFailures() {
   try {
     const raw = await fs.readFile(new URL("./feed-failures.json", import.meta.url), "utf8");
@@ -40,6 +57,12 @@ async function loadFailures() {
   }
 }
 
+/**
+ * Write the failure tracker back to disk.
+ *
+ * @param {Object} failures - Failure records to persist.
+ * @returns {Promise<void>}
+ */
 async function saveFailures(failures) {
   await fs.writeFile(
     new URL("./feed-failures.json", import.meta.url),
@@ -47,6 +70,16 @@ async function saveFailures(failures) {
   );
 }
 
+/**
+ * Update the failure record for one feed based on whether it failed now.
+ *
+ * Consecutive failures increment the counter; a gap resets the record.
+ * A successful fetch removes the entry entirely.
+ *
+ * @param {Object} failures - Mutable failure map.
+ * @param {string} feedName - Feed identifier.
+ * @param {boolean} didFail - Whether the latest fetch failed.
+ */
 function updateFailure(failures, feedName, didFail) {
   if (didFail) {
     if (!failures[feedName]) {
@@ -66,6 +99,13 @@ function updateFailure(failures, feedName, didFail) {
   }
 }
 
+/**
+ * Determine whether a feed has failed long enough to warrant removal.
+ *
+ * @param {Object} failures - Current failure map.
+ * @param {string} feedName - Feed identifier.
+ * @returns {boolean} True when the feed should be removed.
+ */
 function isReadyForRemoval(failures, feedName) {
   const failure = failures[feedName];
   if (!failure) return false;
@@ -77,6 +117,14 @@ function isReadyForRemoval(failures, feedName) {
 // ---------------------------------------------------------------------------
 // 2. Resolve YouTube @handles to channel RSS feeds
 // ---------------------------------------------------------------------------
+
+/**
+ * Resolve a YouTube handle or channel URL to a channel RSS feed URL.
+ *
+ * @param {string} handle - YouTube handle or channel path fragment.
+ * @returns {Promise<string>} Direct RSS feed URL.
+ * @throws {Error} If the channel page cannot be fetched or parsed.
+ */
 async function resolveYouTube(handle) {
   const url = `${YOUTUBE_BASE_URL}${handle}`;
   const res = await fetch(url, {
@@ -94,6 +142,15 @@ async function resolveYouTube(handle) {
 // ---------------------------------------------------------------------------
 // 3. Fetch + parse a single feed, return recent items (dead feeds -> [])
 // ---------------------------------------------------------------------------
+
+/**
+ * Decide whether a feed item is recent enough to keep.
+ *
+ * Undated items are preserved rather than dropped.
+ *
+ * @param {Object} item - Parsed feed item, including `isoDate` or `pubDate`.
+ * @returns {boolean} True when the item should be kept.
+ */
 function isRecent(item) {
   const ts = item.isoDate || item.pubDate;
   if (!ts) return true; // keep undated items rather than lose them
@@ -101,6 +158,16 @@ function isRecent(item) {
   return ageHours <= WINDOW_HOURS;
 }
 
+/**
+ * Fetch and normalize a single source configured in feeds.json.
+ *
+ * Supports plain RSS/Atom URLs and two special cases: `youtube_handle`
+ * and `reddit_rss`. Returning an empty `items` array with `failed: true`
+ * signals the caller to record a failure.
+ *
+ * @param {{name: string, url: string, type?: string, handle?: string}} entry - Feed config entry.
+ * @returns {Promise<{items: Array<{source: string, title: string, link: string, date: string, snippet: string}>, name: string, failed: boolean, error?: string}>}
+ */
 async function fetchFeed(entry) {
   try {
     let url = entry.url;
@@ -140,6 +207,15 @@ async function fetchFeed(entry) {
 // ---------------------------------------------------------------------------
 // 4. S3 client (created once in main, passed to functions that need it)
 // ---------------------------------------------------------------------------
+
+/**
+ * Build a preconfigured S3 client.
+ *
+ * Credentials are read from `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`,
+ * with optional R2 aliases `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY`.
+ *
+ * @returns {import("@aws-sdk/client-s3").S3Client} Configured S3 client instance.
+ */
 function createS3Client() {
   return new S3Client({
     region: S3_REGION,
@@ -154,6 +230,14 @@ function createS3Client() {
 // ---------------------------------------------------------------------------
 // 5. Frontmatter helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Parse YAML frontmatter from a markdown file.
+ *
+ * @param {string} raw - Raw file content.
+ * @returns {{ meta: Object<string, string>, body: string }}
+ *   Parsed metadata and markdown body.
+ */
 function parseFrontmatter(raw) {
   const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
   if (!match) return { meta: {}, body: raw };
@@ -168,6 +252,13 @@ function parseFrontmatter(raw) {
   return { meta, body: match[2] };
 }
 
+/**
+ * Serialize frontmatter and markdown body back to a file string.
+ *
+ * @param {Object<string, string>} meta - Frontmatter key/value pairs.
+ * @param {string} body - Markdown body content.
+ * @returns {string} Serialized file content.
+ */
 function serializeWithFrontmatter(meta, body) {
   const lines = Object.entries(meta).map(([k, v]) => `${k}: ${v}`);
   return `---\n${lines.join("\n")}\n---\n${body}`;
@@ -175,8 +266,16 @@ function serializeWithFrontmatter(meta, body) {
 
 // ---------------------------------------------------------------------------
 // 6. Read AI Digests/Interesting/, stamp new files, return N most recent bodies
-//    Fails gracefully: errors here never abort the main digest run.
 // ---------------------------------------------------------------------------
+
+/**
+ * Load previously saved "interesting" items from S3 for few-shot signal.
+ *
+ * New files are stamped with today's date on first encounter.
+ *
+ * @param {import("@aws-sdk/client-s3").S3Client} r2 - S3 client.
+ * @returns {Promise<Array<string>>} Markdown bodies of interesting items.
+ */
 async function loadInterestingItems(r2) {
   let contents;
   try {
@@ -232,6 +331,14 @@ async function loadInterestingItems(r2) {
 // ---------------------------------------------------------------------------
 // 7. Build the filter prompt + call LLM
 // ---------------------------------------------------------------------------
+
+/**
+ * Assemble the LLM prompt used to filter and format the daily digest.
+ *
+ * @param {Array<{source: string, title: string, link: string, snippet: string}>} items - Candidate feed items.
+ * @param {Array<string>} [examples=[]] - Previously saved interesting item bodies.
+ * @returns {string} Final prompt string.
+ */
 function buildPrompt(items, examples = []) {
   const list = items
     .map(
@@ -288,6 +395,15 @@ If there are no strong matches, write "*No strong matches today.*" under that
 heading instead of padding.`;
 }
 
+/**
+ * Run the digest-generation step against the collected items.
+ *
+ * Returns a pre-built fallback digest when there are no candidates.
+ *
+ * @param {Array<{source: string, title: string, link: string, snippet: string}>} items - Candidate feed items.
+ * @param {Array<string>} [examples=[]] - Previously saved interesting item bodies.
+ * @returns {Promise<string>} Markdown digest content.
+ */
 async function generateDigest(items, examples = []) {
   if (items.length === 0) {
     return `# AI Digest — ${today}\n\n## Strong matches\n\n*No items pulled from feeds today (all feeds empty or unreachable).*\n`;
@@ -300,6 +416,16 @@ async function generateDigest(items, examples = []) {
 // ---------------------------------------------------------------------------
 // 8. Upload digest to R2
 // ---------------------------------------------------------------------------
+
+/**
+ * Upload or merge the generated digest into S3/R2.
+ *
+ * Existing files are appended to only when new substantive content appears.
+ *
+ * @param {import("@aws-sdk/client-s3").S3Client} r2 - S3 client.
+ * @param {string} content - New markdown digest content.
+ * @returns {Promise<void>}
+ */
 async function uploadToR2(r2, content) {
   const key = `${S3_DIGEST_PREFIX}${today}.md`;
 
@@ -347,6 +473,16 @@ async function uploadToR2(r2, content) {
 // ---------------------------------------------------------------------------
 // 9. Handle feed removal for sources that failed N consecutive days
 // ---------------------------------------------------------------------------
+
+/**
+ * Create a PR that removes feeds which have exceeded the failure threshold.
+ *
+ * This is best-effort: failures to authenticate git or write history
+ * are logged and swallowed so they never abort the main digest run.
+ *
+ * @param {Array<string>} feedsToRemove - Feed names to delete from feeds.json.
+ * @returns {Promise<void>}
+ */
 async function removeBrokenFeeds(feedsToRemove) {
   if (feedsToRemove.length === 0) return;
 
@@ -384,7 +520,7 @@ async function removeBrokenFeeds(feedsToRemove) {
       execSync("git add scripts/feeds.json scripts/feed-failures.json", { cwd: process.cwd() });
       const branchName = `auto/remove-broken-feeds-${today}`;
       execSync(`git checkout -b ${branchName}`, { cwd: process.cwd() });
-      execSync(`git commit -m "Remove ${removed} broken feed(s)\\n\\nAutomatically removed feeds that failed for ${FAILURE_THRESHOLD} consecutive days.\\nRemoved: ${feedsToRemove.join(', ')}"`, { cwd: process.cwd() });
+      execSync(`git commit -m "Remove ${removed} broken feed(s)\\\n\\nAutomatically removed feeds that failed for ${FAILURE_THRESHOLD} consecutive days.\\nRemoved: ${feedsToRemove.join(', ')}"`, { cwd: process.cwd() });
       execSync(`git push origin ${branchName}`, { cwd: process.cwd() });
 
       // Create PR with auto-merge using gh CLI (available in GitHub Actions)
@@ -401,6 +537,11 @@ async function removeBrokenFeeds(feedsToRemove) {
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
+
+/**
+ * Run the full daily-digest workflow: fetch feeds, filter through the LLM,
+ * upload the result, and optionally remove repeatedly broken sources.
+ */
 async function main() {
   try {
     const apiKeyVar = requiredApiKeyVar();
