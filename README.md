@@ -20,7 +20,7 @@ scripts/
 ├── daily-digest.js       # Full pipeline: fetch → filter → upload
 ├── update-schedule.js    # Translates a human-readable schedule string to cron and patches the workflow file
 ├── llm.js                # OpenRouter API call (native fetch, no SDK); exports callModel()
-├── config.js             # All tunable values: window, MODELS fallback chain, R2 paths, schedule
+├── config.js             # All tunable values: window, MODELS fallback chain, R2 paths, schedule, content strategy
 ├── feeds.json            # Feed sources grouped by category
 ├── feed-failures.json    # Consecutive failure tracking (committed by the bot)
 └── package.json
@@ -75,6 +75,6 @@ Sources are defined in `scripts/feeds.json` grouped into categories. Three types
 
 ## Personalising
 
-The content strategy — what gets included, what gets filtered out — is a single string constant (`CONTENT_STRATEGY`) in `daily-digest.js`. Edit it to match your niche.
+The content strategy — what gets included, what gets filtered out — is the `CONTENT_STRATEGY` field in `config.js`, alongside all other tunable values. Edit it to match your niche.
 
 Previously saved items act as few-shot examples for the model. Drop Markdown files into the `obsidian/AI Digests/Interesting/` prefix in your R2 bucket and they'll be picked up on the next run and used to calibrate the filter.
