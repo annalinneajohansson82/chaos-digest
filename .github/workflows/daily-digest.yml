@@ -27,9 +27,8 @@ jobs:
         working-directory: scripts
         run: node daily-digest.js
         env:
-          # LLM — set whichever key matches LLM_PROVIDER in config.js
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # LLM — OpenRouter API key
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           # S3-compatible storage — new names preferred, legacy R2_* kept for backward compat.
           # The code reads S3_* first and falls back to R2_* automatically.
           S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}

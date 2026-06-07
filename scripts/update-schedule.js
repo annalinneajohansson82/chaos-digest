@@ -3,14 +3,14 @@
  * and writes it into .github/workflows/daily-digest.yml.
  *
  * Usage:  node scripts/update-schedule.js
- * Requires: GEMINI_API_KEY environment variable
+ * Requires: OPENROUTER_API_KEY environment variable
  */
 
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import config from "./config.js";
-import { generateText, requiredApiKeyVar } from "./llm.js";
+import { callModel, requiredApiKeyVar } from "./llm.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WORKFLOW_PATH = path.resolve(__dirname, "../.github/workflows/daily-digest.yml");
@@ -20,7 +20,7 @@ async function scheduleToCron(schedule) {
 
 Schedule: "${schedule}"`;
 
-  const cron = await generateText(prompt);
+  const cron = await callModel(prompt);
   if (!/^\S+ \S+ \S+ \S+ \S+$/.test(cron)) {
     throw new Error(`Unexpected model response (not a cron expression): "${cron}"`);
   }
