@@ -67,5 +67,5 @@ export default {
   // Note: Node.js version is set on line 17 of .github/workflows/daily-digest.yml.
   // ---------------------------------------------------------------------------
 
-  SCHEDULE: "once daily at 7am UTC",
+  SCHEDULE: "three times daily at 04:00, 12:00, and 20:00 CET",
 };
