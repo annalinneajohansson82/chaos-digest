@@ -68,4 +68,33 @@ export default {
   // ---------------------------------------------------------------------------
 
   SCHEDULE: "three times daily at 04:00, 12:00, and 20:00 CET",
+
+  // ---------------------------------------------------------------------------
+  // Content strategy
+  // Edit this to retarget the digest for a different blog niche.
+  // ---------------------------------------------------------------------------
+
+  CONTENT_STRATEGY: `
+Blog: chaosgoblin.xyz
+Niche: A software developer with AuDHD (autism + ADHD) writing about the
+intersection of the two: what dev work is actually like from inside an AuDHD
+brain. The strongest angles are specific to AuDHD + dev, not just ADHD, not
+just autism, not just "being a developer".
+
+Recurring territory: debugging, code review, pair programming, deadlines,
+meetings, hyperfocus, context-switching, sensory load of open offices,
+executive dysfunction vs the "10x organized engineer" myth, masking at work.
+
+What fits:
+- Smaller/indie/open source AI dev tools, especially workflow hacks
+- Tools or techniques touching cognitive load, context management, focus, task-switching
+- Discourse on neurodivergence in tech work
+- Major model/lab releases (include briefly regardless of niche fit)
+
+What does NOT fit:
+- Generic productivity tips with no dev or neurodivergence angle
+- Inspirational / awareness-campaign tone
+- Enterprise/business software news, pure marketing
+- Generic "AI changes everything" takes
+`,
 };
