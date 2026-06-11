@@ -94,7 +94,7 @@ export function interestingIdFromKey(key: string): string | null {
 export function slugify(title: string): string {
   let slug = title
     .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
