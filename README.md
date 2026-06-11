@@ -98,9 +98,9 @@ App runs on `localhost:4200`; `/api` requests proxy to the Worker on `localhost:
 
 **Seed data** (one-time, from `worker/`, if using local R2):
 ```bash
-npx wrangler r2 object put 'notes/obsidian/AI Digests/2026-06-10.md' --file seed/2026-06-10.md --local
-npx wrangler r2 object put 'notes/obsidian/AI Digests/Interesting/existing-item.md' --file seed/interesting-example.md --local
+npm run seed
 ```
+(seeds example digests and an interesting item into the local R2 state)
 
 **Deploy:**
 
