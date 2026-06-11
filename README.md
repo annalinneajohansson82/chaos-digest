@@ -78,3 +78,47 @@ Sources are defined in `scripts/feeds.json` grouped into categories. Three types
 The content strategy — what gets included, what gets filtered out — is the `CONTENT_STRATEGY` field in `config.js`, alongside all other tunable values. Edit it to match your niche.
 
 Previously saved items act as few-shot examples for the model. Drop Markdown files into the `obsidian/AI Digests/Interesting/` prefix in your R2 bucket and they'll be picked up on the next run and used to calibrate the filter.
+
+## Web UI
+
+**Architecture:** Angular 18 SPA (`web/`) deployed to Cloudflare Pages; private Hono API (`worker/`) runs as a Cloudflare Worker with R2 binding for the `notes` bucket. Auth is zero-code: Cloudflare Access policy on the Pages hostname covers both the UI and the proxied API.
+
+**Local development:**
+
+Terminal 1 (Worker):
+```bash
+cd worker && npx wrangler dev
+```
+
+Terminal 2 (Web):
+```bash
+cd web && npm start
+```
+App runs on `localhost:4200`; `/api` requests proxy to the Worker on `localhost:8787`.
+
+**Seed data** (one-time, from `worker/`, if using local R2):
+```bash
+npx wrangler r2 object put 'notes/obsidian/AI Digests/2026-06-10.md' --file seed/2026-06-10.md --local
+npx wrangler r2 object put 'notes/obsidian/AI Digests/Interesting/existing-item.md' --file seed/interesting-example.md --local
+```
+
+**Deploy:**
+
+1. **Worker:** From `worker/` directory:
+   ```bash
+   npx wrangler deploy
+   ```
+   Remains private (`workers_dev = false`, no public routes).
+
+2. **Pages project:** In Cloudflare dashboard, create a Git-integrated Pages project:
+   - Root directory: `web`
+   - Build command: `npm ci && npm run build`
+   - Build output: `dist/web/browser`
+
+3. **Service binding:** Pages project Settings → Functions → Add a service binding:
+   - Name: `API`
+   - Service: `chaos-digest-api` (the private Worker)
+
+4. **Access control:** Cloudflare Zero Trust → Create an Access application covering the Pages hostname. Include preview URLs (`*.pages.dev`) in the policy to protect both production and preview deployments.
+
+**Module federation:** The app is a Native Federation remote exposing `./routes` in `remoteEntry.json`. A future host application can mount it using `loadRemoteModule('chaos-digest', './routes')` and may override the `API_BASE_URL` injection token to point to its own API; standalone deployment is unaffected.
