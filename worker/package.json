@@ -5,13 +5,15 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "seed": "node seed/seed.mjs"
   },
   "dependencies": {
     "hono": "^4.7.11"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250620.0",
+    "miniflare": "3.20250718.3",
     "typescript": "~5.5.0",
     "wrangler": "^3.114.4"
   }
