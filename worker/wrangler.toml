@@ -1,0 +1,11 @@
+name = "chaos-digest-api"
+main = "src/index.ts"
+compatibility_date = "2026-06-01"
+
+# This worker is never publicly reachable — it has no auth code and is
+# only accessible through a Pages service binding from the front-end.
+workers_dev = false
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "notes"
